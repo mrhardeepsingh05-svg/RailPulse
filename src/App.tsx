@@ -1,11 +1,13 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AppLayout } from './components/Layout';
 import { CardSkeleton } from './components/ui/Badges';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
-import { LoginPage } from './pages/LoginPage';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import type { UserRole } from './types';
+
+const AppLayout = lazy(() => import('./components/Layout').then((m) => ({ default: m.AppLayout })));
+const LoginPage = lazy(() => import('./pages/LoginPage').then((m) => ({ default: m.LoginPage })));
 
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
 const AssetsPage = lazy(() => import('./pages/AssetsPage').then((m) => ({ default: m.AssetsPage })));
@@ -40,23 +42,31 @@ function ProtectedRoute({
   }
 
   if (!user) {
-    return <LoginPage />;
+    return (
+      <Suspense fallback={<CardSkeleton rows={4} />}>
+        <LoginPage />
+      </Suspense>
+    );
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return (
-      <AppLayout title="Access Restricted">
-        <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
-          Your role ({user.role_display}) does not have permission to view this page.
-        </div>
-      </AppLayout>
+      <Suspense fallback={<CardSkeleton rows={4} />}>
+        <AppLayout title="Access Restricted">
+          <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">
+            Your role ({user.role_display}) does not have permission to view this page.
+          </div>
+        </AppLayout>
+      </Suspense>
     );
   }
 
   return (
-    <AppLayout title={title}>
-      <Suspense fallback={<CardSkeleton rows={5} />}>{children}</Suspense>
-    </AppLayout>
+    <Suspense fallback={<CardSkeleton rows={5} />}>
+      <AppLayout title={title}>
+        {children}
+      </AppLayout>
+    </Suspense>
   );
 }
 
@@ -80,12 +90,14 @@ export function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <ToastProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
-      </ToastProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ToastProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

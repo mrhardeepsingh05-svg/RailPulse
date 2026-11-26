@@ -5,6 +5,11 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
+import shutil
+import threading
+import time
+import uuid
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -12,6 +17,7 @@ from typing import Any, Optional
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -26,7 +32,8 @@ from api.analytics import (
     global_search,
 )
 from api.config import BASE_DIR, settings
-from api.database import get_db, init_db
+from api.database import backup_database, check_db_integrity, get_db, init_db
+from api.logging_utils import app_logger
 from api.schemas import (
     AssetCreateRequest,
     AssetUpdateRequest,
@@ -66,10 +73,57 @@ ALLOWED_INSPECTION_CATEGORIES = {
 ALLOWED_FAULT_SEVERITIES = {"Low", "Medium", "High", "Critical"}
 
 
+class MetricsCollector:
+    """Thread-safe rolling runtime telemetry for System Health reporting."""
+
+    def __init__(self) -> None:
+        self.started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.total_requests = 0
+        self.error_5xx_count = 0
+        self.durations_ms: deque[float] = deque(maxlen=500)
+        self._lock = threading.Lock()
+
+    def record(self, status_code: int, duration_ms: float) -> None:
+        with self._lock:
+            self.total_requests += 1
+            if status_code >= 500:
+                self.error_5xx_count += 1
+            self.durations_ms.append(duration_ms)
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            samples = sorted(self.durations_ms)
+            total = self.total_requests
+            errs = self.error_5xx_count
+        if samples:
+            p50 = round(samples[len(samples) // 2], 2)
+            p95 = round(samples[min(len(samples) - 1, int(len(samples) * 0.95))], 2)
+        else:
+            p50 = 0.0
+            p95 = 0.0
+        err_rate = round((errs / total) * 100, 2) if total > 0 else 0.0
+        return {
+            "started_at": self.started_at,
+            "total_requests": total,
+            "error_5xx_count": errs,
+            "error_rate_pct": err_rate,
+            "p50_ms": p50,
+            "p95_ms": p95,
+        }
+
+
+runtime_metrics = MetricsCollector()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
     seed_initial_data()
+    if settings.ENV == "production" and settings.USING_EPHEMERAL_SECRET:
+        app_logger.warning(
+            "Using ephemeral JWT secret in production mode; configure RAILPULSE_JWT_SECRET.",
+            extra={"structured": {"event": "ephemeral_secret_warning"}},
+        )
     yield
 
 
@@ -82,6 +136,7 @@ app = FastAPI(
     redoc_url=None,
 )
 
+app.add_middleware(GZipMiddleware, minimum_size=500)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
@@ -93,9 +148,13 @@ app.add_middleware(
 
 @app.middleware("http")
 async def security_and_rate_limit_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex[:16]
+    request.state.request_id = request_id
+    started = time.perf_counter()
     path = request.url.path
+    ip = get_client_ip(request)
+
     if path.startswith("/api/"):
-        ip = get_client_ip(request)
         if path == "/api/auth/login":
             ok, retry = rate_limiter.check(f"login:{ip}", max_requests=25, window_seconds=60)
         elif path.startswith("/api/ai/") or path.startswith("/api/assistant/"):
@@ -106,11 +165,15 @@ async def security_and_rate_limit_middleware(request: Request, call_next):
         if not ok:
             return JSONResponse(
                 status_code=429,
-                content={"detail": "Too many requests right now. Please wait a moment and try again."},
-                headers={"Retry-After": str(retry)},
+                content={"detail": "Too many requests right now. Please wait a moment and try again.", "request_id": request_id},
+                headers={"Retry-After": str(retry), "X-Request-ID": request_id},
             )
 
     response = await call_next(request)
+    duration_ms = round((time.perf_counter() - started) * 1000, 2)
+    if path.startswith("/api/"):
+        runtime_metrics.record(response.status_code, duration_ms)
+    response.headers["X-Request-ID"] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -125,16 +188,38 @@ async def security_and_rate_limit_middleware(request: Request, call_next):
     )
     if path.startswith("/api/auth/") or path.startswith("/api/admin/"):
         response.headers["Cache-Control"] = "no-store"
+    elif path.startswith("/assets/"):
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+
+    if path.startswith("/api/") and settings.ENV != "test":
+        app_logger.info(
+            "http_request",
+            extra={
+                "structured": {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": path,
+                    "status_code": response.status_code,
+                    "duration_ms": duration_ms,
+                    "client_ip": ip,
+                }
+            },
+        )
     return response
 
 
 @app.exception_handler(Exception)
-async def unhandled_exception_handler(_: Request, exc: Exception):
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    req_id = getattr(request.state, "request_id", "unknown")
     if isinstance(exc, HTTPException):
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail, "request_id": req_id})
+    app_logger.error(
+        "unhandled_server_error",
+        extra={"structured": {"request_id": req_id, "path": request.url.path, "error_type": type(exc).__name__}},
+    )
     return JSONResponse(
         status_code=500,
-        content={"detail": "Something went wrong on the server. Please try again."},
+        content={"detail": "Something went wrong on the server. Please try again.", "request_id": req_id},
     )
 
 
@@ -582,6 +667,84 @@ def admin_audit_logs(
             (limit,),
         ).fetchall()
     return {"items": [dict(r) for r in rows]}
+
+
+@app.post("/api/admin/backup")
+def admin_create_backup(
+    request: Request,
+    admin: dict[str, Any] = Depends(require_roles("admin")),
+):
+    integrity_ok = check_db_integrity()
+    backup_path = backup_database()
+    backup_ok = check_db_integrity(backup_path)
+    with get_db() as conn:
+        log_activity(
+            conn,
+            actor_user_id=admin["id"],
+            actor_username=admin["username"],
+            actor_role=admin["role"],
+            action="DATABASE_BACKUP_CREATED",
+            entity_type="database",
+            entity_id=backup_path.name,
+            details=f"Integrity source={integrity_ok}, backup={backup_ok}",
+            ip_address=get_client_ip(request),
+        )
+        conn.commit()
+    return {
+        "status": "ok" if (integrity_ok and backup_ok) else "warning",
+        "source_integrity": integrity_ok,
+        "backup_integrity": backup_ok,
+        "backup_filename": backup_path.name,
+        "size_bytes": backup_path.stat().st_size,
+    }
+
+
+@app.get("/api/admin/system-health")
+def admin_system_health(_: dict[str, Any] = Depends(require_roles("admin"))):
+    db_t0 = time.perf_counter()
+    db_ok = False
+    try:
+        db_ok = check_db_integrity()
+    except Exception:
+        db_ok = False
+    db_latency_ms = round((time.perf_counter() - db_t0) * 1000, 2)
+
+    db_size = settings.DB_PATH.stat().st_size if settings.DB_PATH.exists() else 0
+    upload_files = list(settings.UPLOAD_DIR.glob("*")) if settings.UPLOAD_DIR.exists() else []
+    uploads_bytes = sum(f.stat().st_size for f in upload_files if f.is_file())
+    disk_usage = shutil.disk_usage(str(settings.DB_PATH.parent if settings.DB_PATH.parent.exists() else BASE_DIR))
+
+    backup_dir = settings.DB_PATH.parent / "backups"
+    backups = sorted(backup_dir.glob("*.db"), key=lambda p: p.stat().st_mtime, reverse=True) if backup_dir.exists() else []
+    last_backup = (
+        {
+            "status": "AVAILABLE",
+            "filename": backups[0].name,
+            "size_bytes": backups[0].stat().st_size,
+            "created_at": datetime.fromtimestamp(backups[0].stat().st_mtime, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+        if backups
+        else {"status": "UNAVAILABLE", "message": "No database backup created yet."}
+    )
+
+    api_stats = runtime_metrics.snapshot()
+    return {
+        "backend_status": "HEALTHY",
+        "database_status": "HEALTHY" if db_ok else "UNAVAILABLE",
+        "db_latency_ms": db_latency_ms,
+        "api_health": api_stats,
+        "ai_service_status": "CONNECTED" if is_live_ai_configured() else "UNAVAILABLE",
+        "ai_service_detail": "Gemini Vision/LLM connected" if is_live_ai_configured() else "No GEMINI_API_KEY configured (Guided/Demo mode)",
+        "storage": {
+            "database_bytes": db_size,
+            "upload_files_count": len([f for f in upload_files if f.is_file()]),
+            "uploads_bytes": uploads_bytes,
+            "disk_free_bytes": disk_usage.free,
+        },
+        "last_backup": last_backup,
+        "latest_test_results": "UNKNOWN — Execute CI or local test suite to verify latest commit",
+        "security_scan_status": "UNKNOWN — Execute npm audit / pip-audit / secret scan to verify",
+    }
 
 
 # ---------------------------------------------------------------------------

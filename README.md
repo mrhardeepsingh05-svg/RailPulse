@@ -19,9 +19,11 @@ RailPulse AI is a railway asset inspection and maintenance management platform w
 - **Analytics & Trends (`/analytics`)**: Fault category distribution, monthly inspection activity, maintenance completion rate, asset condition breakdown by type, and inspection history.
 - **Reports (`/reports`)**: View and download PDF or CSV reports for Inspection Reports, Asset Condition Reports, Maintenance Reports, Team Activity Reports, and Fault Summary Reports.
 - **Notifications (`/notifications`)**: Central notification centre for new inspections, assigned tasks, reviews, completed tasks, asset alerts, and upcoming inspection reminders.
-- **Team Management (`/team`)**: Admin workspace for `Admin`, `Inspector`, `Engineer`, and `Maintenance Staff` roles, asset type schedules, and system activity logs.
+- **Team Management (`/team`)**: Admin workspace for `Admin`, `Inspector`, `Engineer`, and `Maintenance Staff` roles, asset type schedules, system activity logs, live **System Health** checks, and online database backups.
 - **Global Search**: Top header search bar across Assets, Inspections, Maintenance Tasks, Team Members, and Reports.
 - **Raily Helper**: Cute floating animated railway assistant grounded in live database records (uses connected Gemini AI when `GEMINI_API_KEY` is set, or clearly states Guided Help mode when unavailable).
+
+For full architecture, database, API, security, CI/CD, backup/recovery, and troubleshooting documentation, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 

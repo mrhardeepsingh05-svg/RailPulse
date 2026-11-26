@@ -27,6 +27,7 @@ export function CalendarPage() {
   const [cursor, setCursor] = useState(() => new Date());
   const [typeFilter, setTypeFilter] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [todayIso] = useState(() => toIsoDate(new Date()));
 
   useEffect(() => {
     api
@@ -69,7 +70,6 @@ export function CalendarPage() {
     setCursor(next);
   };
 
-  const todayIso = toIsoDate(new Date());
   const headerLabel = cursor.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (

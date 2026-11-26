@@ -109,7 +109,7 @@ export function NotificationsPage() {
                 </div>
                 <p className="text-xs text-slate-600 mt-1">{n.message}</p>
               </div>
-              <span className="text-[11px] text-slate-400 tabular-nums shrink-0">{n.created_at}</span>
+              <span className="text-[11px] text-slate-600 tabular-nums shrink-0">{n.created_at}</span>
             </button>
           ))}
         </div>

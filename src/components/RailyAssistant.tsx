@@ -119,9 +119,9 @@ export function RailyAssistant() {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2 no-print">
+    <div className="fixed bottom-4 right-4 z-40 flex flex-col items-end gap-2 no-print pointer-events-none">
       {!open && showBubble && (
-        <div className="flex items-center gap-2 rounded-2xl border border-violet-200 bg-white px-3.5 py-2 shadow-md max-w-xs">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-violet-200 bg-white px-3.5 py-2 shadow-md max-w-xs">
           <p className="text-xs text-slate-700">
             <span className="font-semibold text-[#1E3A5F]">Raily:</span> Need help finding something or checking today&apos;s data?
           </p>
@@ -139,7 +139,7 @@ export function RailyAssistant() {
       {open && (
         <section
           aria-label="Raily Helper Panel"
-          className="w-[calc(100vw-2rem)] sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col max-h-[75vh]"
+          className="pointer-events-auto w-[calc(100vw-2rem)] sm:w-96 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden flex flex-col max-h-[75vh]"
         >
           <div className="flex items-center justify-between bg-[#1E3A5F] px-4 py-3 text-white">
             <div className="flex items-center gap-2.5">
@@ -250,7 +250,7 @@ export function RailyAssistant() {
         onMouseEnter={() => setWaving(true)}
         aria-expanded={open}
         aria-label="Open Raily Railway Assistant"
-        className="flex items-center gap-2 rounded-full border border-violet-200 bg-[#1E3A5F] px-3.5 py-2 text-white shadow-lg hover:bg-[#284B78] transition-colors"
+        className="pointer-events-auto flex items-center gap-2 rounded-full border border-violet-200 bg-[#1E3A5F] px-3.5 py-2 text-white shadow-lg hover:bg-[#284B78] transition-colors"
       >
         <RailyAvatar waving={waving} />
         <span className="text-xs font-semibold pr-1 hidden sm:inline">Ask Raily</span>

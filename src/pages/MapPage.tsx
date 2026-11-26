@@ -229,7 +229,7 @@ export function MapPage() {
                 <Navigation className="h-4 w-4 text-[#1E3A5F]" aria-hidden="true" />
                 <h2 className="text-sm font-bold text-[#1E3A5F]">Add Verified GPS Location</h2>
               </div>
-              <p className="text-slate-500">Save real GPS coordinates for an asset to show it on the map.</p>
+              <p className="text-slate-600">Save real GPS coordinates for an asset to show it on the map.</p>
 
               <div>
                 <label htmlFor="map-asset" className="block font-semibold text-slate-700">Choose Asset</label>
@@ -262,12 +262,12 @@ export function MapPage() {
             {unverifiedAssets.length === 0 ? (
               <p className="text-slate-500">All assets have verified GPS coordinates stored.</p>
             ) : (
-              <ul className="space-y-2 max-h-60 overflow-y-auto">
+              <ul tabIndex={0} aria-label="Assets without map coordinates" className="space-y-2 max-h-60 overflow-y-auto">
                 {unverifiedAssets.map((a) => (
                   <li key={a.id} className="rounded-xl border border-slate-100 bg-[#F4F7FB] px-3 py-2 flex items-center justify-between gap-2">
                     <div>
                       <strong className="text-slate-800">{a.asset_code}</strong>
-                      <span className="block text-[11px] text-slate-500">{a.section_location}</span>
+                      <span className="block text-[11px] text-slate-600">{a.section_location}</span>
                     </div>
                     <StatusBadge value={a.current_condition} />
                   </li>

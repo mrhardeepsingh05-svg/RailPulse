@@ -561,7 +561,7 @@ def _pdf_escape(text: str) -> str:
 
 
 def export_report_pdf(report: dict[str, Any], report_type: str = "asset_condition") -> bytes:
-    """Generate a standards-compliant PDF 1.4 report for any of the 5 report types."""
+    """Generate a standards-compliant multi-page PDF 1.4 report for any of the 5 report types."""
     titles = {
         "inspections": "Inspection Summary Report",
         "asset_condition": "Asset Condition Report",
@@ -577,46 +577,66 @@ def export_report_pdf(report: dict[str, Any], report_type: str = "asset_conditio
     ]
 
     if report_type == "inspections":
-        for r in report["inspections"][:35]:
+        for r in report["inspections"]:
             tag = "[DEMO]" if r["is_demo"] else "[REAL]"
             lines.append(f"{tag} {r['inspection_code']} | {r['inspection_date']} | {r['asset_code']} | {r['status']} | {r['inspector_name']}")
     elif report_type == "maintenance":
-        for r in report["maintenance"][:35]:
+        for r in report["maintenance"]:
             tag = "[DEMO]" if r["is_demo"] else "[REAL]"
             lines.append(f"{tag} {r['work_order_code']} | {r['priority']} | {r['status']} | Due:{r['due_date']} | {r['assignee_name']} | {r['title'][:28]}")
     elif report_type == "team_activity":
-        for r in report["team_activity"][:35]:
+        for r in report["team_activity"]:
             lines.append(f"{r['created_at'][:16]} | {r['actor_username']} ({r['actor_role']}) | {r['action']} | {r['entity_id']}")
     elif report_type == "fault_summary":
-        for r in report["fault_summary"][:35]:
+        for r in report["fault_summary"]:
             lines.append(f"{r['category']} | Total:{r['total_faults']} | Critical:{r['critical_count']} | High:{r['high_count']} | Open:{r['open_count']} | Verified:{r['verified_count']}")
     else:
-        for r in report["asset_condition"][:35]:
+        for r in report["asset_condition"]:
             tag = "[DEMO]" if r["is_demo"] else "[REAL]"
             lines.append(f"{tag} {r['asset_code']} | {r['asset_name'][:24]} | {r['current_condition']} | Last:{r['last_inspection_date'] or 'None'} | OpenTasks:{r['open_tasks']}")
 
     if len(lines) == 4:
         lines.append("No database records available for this report.")
 
-    y = 755
-    content_ops = ["BT", "/F1 10 Tf"]
-    for idx, line in enumerate(lines):
-        if y < 48:
-            break
-        size = 13 if idx == 0 else 9
-        content_ops.append(f"/F1 {size} Tf")
-        content_ops.append(f"1 0 0 1 40 {y} Tm ({_pdf_escape(line)}) Tj")
-        y -= 18 if idx == 0 else 13
-    content_ops.append("ET")
-    stream_data = "\n".join(content_ops).encode("latin-1")
+    # Paginate into 48 lines per page
+    pages_lines: list[list[str]] = [lines[i : i + 48] for i in range(0, len(lines), 48)]
+    page_count = len(pages_lines)
 
-    objects = [
+    # Object numbering:
+    # 1: Catalog, 2: Pages, 3: Font
+    # For each page p (0..page_count-1):
+    #   page_obj_id = 4 + 2*p
+    #   content_obj_id = 5 + 2*p
+    page_ids = [4 + 2 * p for p in range(page_count)]
+    kids_str = " ".join(f"{pid} 0 R" for pid in page_ids)
+
+    objects: list[bytes] = [
         b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
-        b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n",
-        f"4 0 obj << /Length {len(stream_data)} >> stream\n".encode("latin-1") + stream_data + b"\nendstream endobj\n",
-        b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
+        f"2 0 obj << /Type /Pages /Kids [{kids_str}] /Count {page_count} >> endobj\n".encode("latin-1"),
+        b"3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
     ]
+
+    for p_idx, p_lines in enumerate(pages_lines):
+        page_obj_id = 4 + 2 * p_idx
+        content_obj_id = 5 + 2 * p_idx
+        y = 755
+        ops = ["BT"]
+        for l_idx, line in enumerate(p_lines):
+            size = 13 if (p_idx == 0 and l_idx == 0) else 9
+            ops.append(f"/F1 {size} Tf")
+            ops.append(f"1 0 0 1 40 {y} Tm ({_pdf_escape(line)}) Tj")
+            y -= 18 if (p_idx == 0 and l_idx == 0) else 13
+        ops.append("ET")
+        stream_data = "\n".join(ops).encode("latin-1")
+
+        objects.append(
+            f"{page_obj_id} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents {content_obj_id} 0 R /Resources << /Font << /F1 3 0 R >> >> >> endobj\n".encode("latin-1")
+        )
+        objects.append(
+            f"{content_obj_id} 0 obj << /Length {len(stream_data)} >> stream\n".encode("latin-1")
+            + stream_data
+            + b"\nendstream endobj\n"
+        )
 
     pdf = bytearray(b"%PDF-1.4\n")
     offsets: list[int] = [0]

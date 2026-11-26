@@ -1,9 +1,40 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { FolderPlus, Shield, UserPlus } from 'lucide-react';
+import { Activity, FolderPlus, HardDrive, RefreshCw, Shield, UserPlus } from 'lucide-react';
 import { CardSkeleton, ProvenanceBadge } from '../components/ui/Badges';
 import { useToast } from '../context/ToastContext';
 import { api, ApiError } from '../lib/api';
 import type { AssetCategory, User, UserRole } from '../types';
+
+interface SystemHealth {
+  backend_status: string;
+  database_status: string;
+  db_latency_ms: number;
+  api_health: {
+    started_at: string;
+    total_requests: number;
+    error_5xx_count: number;
+    error_rate_pct: number;
+    p50_ms: number;
+    p95_ms: number;
+  };
+  ai_service_status: string;
+  ai_service_detail: string;
+  storage: {
+    database_bytes: number;
+    upload_files_count: number;
+    uploads_bytes: number;
+    disk_free_bytes: number;
+  };
+  last_backup: {
+    status: string;
+    filename?: string;
+    size_bytes?: number;
+    created_at?: string;
+    message?: string;
+  };
+  latest_test_results: string;
+  security_scan_status: string;
+}
 
 interface AuditLogRow {
   id: number;
@@ -22,6 +53,9 @@ export function TeamPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<AssetCategory[]>([]);
   const [logs, setLogs] = useState<AuditLogRow[]>([]);
+  const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [pingMs, setPingMs] = useState<number | null>(null);
+  const [backingUp, setBackingUp] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [uUsername, setUUsername] = useState('');
@@ -39,20 +73,37 @@ export function TeamPage() {
   const loadTeam = useCallback(async () => {
     setLoading(true);
     try {
-      const [uRes, cRes, lRes] = await Promise.all([
+      const t0 = performance.now();
+      const [uRes, cRes, lRes, hRes] = await Promise.all([
         api.get<{ items: User[] }>('/api/admin/users'),
         api.get<{ items: AssetCategory[] }>('/api/categories'),
         api.get<{ items: AuditLogRow[] }>('/api/admin/audit-logs?limit=40'),
+        api.get<SystemHealth>('/api/admin/system-health'),
       ]);
+      setPingMs(Math.round(performance.now() - t0));
       setUsers(uRes.items);
       setCategories(cRes.items);
       setLogs(lRes.items);
+      setHealth(hRes);
     } catch (err) {
       pushToast('error', 'Could not load team settings', err instanceof ApiError ? err.message : undefined);
     } finally {
       setLoading(false);
     }
   }, [pushToast]);
+
+  const handleBackup = async () => {
+    setBackingUp(true);
+    try {
+      const res = await api.post<{ backup_filename: string; backup_integrity: boolean }>('/api/admin/backup');
+      pushToast('success', 'Backup created', `${res.backup_filename} (integrity: ${res.backup_integrity ? 'ok' : 'check'})`);
+      await loadTeam();
+    } catch (err) {
+      pushToast('error', 'Backup failed', err instanceof ApiError ? err.message : undefined);
+    } finally {
+      setBackingUp(false);
+    }
+  };
 
   useEffect(() => {
     void loadTeam();
@@ -123,6 +174,82 @@ export function TeamPage() {
 
   return (
     <div className="space-y-6">
+      {/* Live System Health Panel */}
+      {health && (
+        <section aria-label="System Health" className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-[#1E3A5F]" aria-hidden="true" />
+              <h2 className="text-sm font-bold text-[#1E3A5F]">System Health &amp; Backups</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void loadTeam()}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                Refresh Health
+              </button>
+              <button
+                type="button"
+                disabled={backingUp}
+                onClick={() => void handleBackup()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#1E3A5F] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#284B78] disabled:opacity-60"
+              >
+                <HardDrive className="h-3.5 w-3.5" aria-hidden="true" />
+                {backingUp ? 'Creating Backup...' : 'Create DB Backup'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div className="rounded-xl border border-slate-200 bg-[#F4F7FB] p-3">
+              <span className="text-slate-600 block">Frontend &amp; Backend</span>
+              <strong className="text-emerald-700">{health.backend_status}</strong>
+              <span className="block text-[11px] text-slate-600 mt-0.5">Live ping: {pingMs ?? '—'} ms</span>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-[#F4F7FB] p-3">
+              <span className="text-slate-600 block">Database Integrity</span>
+              <strong className={health.database_status === 'HEALTHY' ? 'text-emerald-700' : 'text-rose-700'}>
+                {health.database_status}
+              </strong>
+              <span className="block text-[11px] text-slate-600 mt-0.5">Check time: {health.db_latency_ms} ms</span>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-[#F4F7FB] p-3">
+              <span className="text-slate-600 block">API Latency &amp; Errors</span>
+              <strong className="text-[#1E3A5F] tabular-nums">
+                p50 {health.api_health.p50_ms} ms · p95 {health.api_health.p95_ms} ms
+              </strong>
+              <span className="block text-[11px] text-slate-600 mt-0.5">
+                {health.api_health.total_requests} requests · {health.api_health.error_rate_pct}% 5xx errors
+              </span>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-[#F4F7FB] p-3">
+              <span className="text-slate-600 block">Storage &amp; Backups</span>
+              <strong className="text-[#1E3A5F] tabular-nums">
+                DB {Math.round(health.storage.database_bytes / 1024)} KB · {health.storage.upload_files_count} photos
+              </strong>
+              <span className="block text-[11px] text-slate-600 mt-0.5 truncate">
+                Last backup: {health.last_backup.status === 'AVAILABLE' ? health.last_backup.created_at : 'UNAVAILABLE'}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-600">
+            <div className="rounded-xl border border-slate-100 px-3 py-2">
+              <strong>AI Service:</strong> {health.ai_service_status} — {health.ai_service_detail}
+            </div>
+            <div className="rounded-xl border border-slate-100 px-3 py-2">
+              <strong>Tests:</strong> {health.latest_test_results}
+            </div>
+            <div className="rounded-xl border border-slate-100 px-3 py-2">
+              <strong>Security Scan:</strong> {health.security_scan_status}
+            </div>
+          </div>
+        </section>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         <section className="lg:col-span-7 rounded-2xl border border-slate-200/80 bg-white p-5 space-y-4 shadow-xs">
           <div className="flex items-center gap-2">
@@ -130,7 +257,7 @@ export function TeamPage() {
             <h2 className="text-sm font-bold text-[#1E3A5F]">Team Members &amp; Roles</h2>
           </div>
 
-          <div className="overflow-x-auto">
+          <div tabIndex={0} role="region" aria-label="Team members table" className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-slate-200 bg-[#F4F7FB] font-semibold text-slate-600 uppercase">
@@ -208,7 +335,7 @@ export function TeamPage() {
             <h2 className="text-sm font-bold text-[#1E3A5F]">Asset Types &amp; Check Schedules</h2>
           </div>
 
-          <div className="space-y-2 max-h-56 overflow-y-auto">
+          <div tabIndex={0} role="region" aria-label="Asset types list" className="space-y-2 max-h-56 overflow-y-auto">
             {categories.map((c) => (
               <div key={c.id} className="rounded-xl border border-slate-200 p-2.5 text-xs flex items-center justify-between gap-2">
                 <div>
@@ -244,7 +371,7 @@ export function TeamPage() {
           <Shield className="h-4 w-4 text-[#1E3A5F]" aria-hidden="true" />
           <h2 className="text-sm font-bold text-[#1E3A5F]">System Activity Log</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div tabIndex={0} role="region" aria-label="System activity log table" className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-[#F4F7FB] font-semibold text-slate-600 uppercase">

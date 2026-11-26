@@ -261,6 +261,129 @@ class RailPulseV2BackendTests(unittest.TestCase):
         self.assertFalse(raily.json()["ai_available"])
         self.assertIn("not connected", raily.json()["limitation_note"].lower())
 
+    def test_08_request_id_backup_and_integrity(self) -> None:
+        adm = self._login("admin.demo", "Admin@2026!")
+        eng = self._login("engineer.demo", "Engineer@2026!")
+
+        # Request ID header returned on all API responses
+        h = self.client.get("/api/health")
+        self.assertTrue(h.headers.get("X-Request-ID"))
+
+        # Engineer cannot trigger DB backup
+        self.assertEqual(self.client.post("/api/admin/backup", headers=self._hdr(eng)).status_code, 403)
+
+        # Admin can create online backup and verify integrity
+        bkp = self.client.post("/api/admin/backup", headers=self._hdr(adm))
+        self.assertEqual(bkp.status_code, 200, bkp.text)
+        body = bkp.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertTrue(body["source_integrity"])
+        self.assertTrue(body["backup_integrity"])
+        self.assertGreater(body["size_bytes"], 0)
+
+    def test_09_admin_users_categories_faults_and_csv_exports(self) -> None:
+        adm = self._login("admin.demo", "Admin@2026!")
+        eng = self._login("engineer.demo", "Engineer@2026!")
+
+        # Category creation + duplicate rejection
+        cat = self.client.post(
+            "/api/categories",
+            headers=self._hdr(adm),
+            json={"code": "TUN", "name": "Tunnels", "inspection_interval_days": 60, "description": "Tunnel linings"},
+        )
+        self.assertEqual(cat.status_code, 201, cat.text)
+        dup_cat = self.client.post(
+            "/api/categories",
+            headers=self._hdr(adm),
+            json={"code": "TUN", "name": "Tunnels", "inspection_interval_days": 60, "description": "Duplicate"},
+        )
+        self.assertEqual(dup_cat.status_code, 409)
+
+        # User provisioning, role update, deactivation, and blocked login
+        u_res = self.client.post(
+            "/api/admin/users",
+            headers=self._hdr(adm),
+            json={
+                "username": "new.staff",
+                "email": "new.staff@railpulse.example",
+                "full_name": "New Staff",
+                "password": "Password123!",
+                "role": "staff",
+                "department": "Track Unit",
+            },
+        )
+        self.assertEqual(u_res.status_code, 201, u_res.text)
+        uid = u_res.json()["id"]
+
+        u_upd = self.client.patch(
+            f"/api/admin/users/{uid}",
+            headers=self._hdr(adm),
+            json={"role": "inspector", "is_active": False},
+        )
+        self.assertEqual(u_upd.status_code, 200)
+        self.assertEqual(u_upd.json()["role"], "inspector")
+
+        blocked_login = self.client.post(
+            "/api/auth/login", json={"username": "new.staff", "password": "Password123!"}
+        )
+        self.assertEqual(blocked_login.status_code, 403)
+
+        # Asset update + fault create/verify + analyze existing inspection
+        upd_asset = self.client.patch(
+            "/api/assets/1",
+            headers=self._hdr(eng),
+            json={"current_condition": "Critical Alert", "description": "Updated by integration test"},
+        )
+        self.assertEqual(upd_asset.status_code, 200)
+
+        flt = self.client.post(
+            "/api/faults",
+            headers=self._hdr(eng),
+            json={
+                "asset_id": 1,
+                "category": "Track & Fasteners",
+                "severity": "High",
+                "title": "Bolt tension loss",
+                "description": "Measured drop in torque at switch joint.",
+            },
+        )
+        self.assertEqual(flt.status_code, 201)
+        fid = flt.json()["id"]
+        ver = self.client.patch(
+            f"/api/faults/{fid}/verify",
+            headers=self._hdr(eng),
+            json={"human_verified": True, "status": "Open"},
+        )
+        self.assertEqual(ver.status_code, 200)
+        self.assertEqual(ver.json()["human_verified"], 1)
+
+        ai_existing = self.client.post("/api/ai/analyze-inspection/1", headers=self._hdr(eng))
+        self.assertEqual(ai_existing.status_code, 200)
+
+        # CSV export across report types + notification read + logout
+        for rtype in ("inspections", "asset_condition", "maintenance", "team_activity", "fault_summary"):
+            csv_res = self.client.get(f"/api/reports/export?fmt=csv&report_type={rtype}", headers=self._hdr(eng))
+            self.assertEqual(csv_res.status_code, 200)
+
+        notifs = self.client.get("/api/notifications", headers=self._hdr(eng)).json()["items"]
+        if notifs:
+            self.assertEqual(self.client.patch(f"/api/notifications/{notifs[0]['id']}/read", headers=self._hdr(eng)).status_code, 200)
+
+        self.assertEqual(self.client.post("/api/auth/logout", headers=self._hdr(adm)).status_code, 200)
+
+        # Rate limiter enforcement check on login
+        for _ in range(25):
+            self.client.post("/api/auth/login", json={"username": "nobody", "password": "wrongpassword"})
+        limited = self.client.post("/api/auth/login", json={"username": "nobody", "password": "wrongpassword"})
+        self.assertEqual(limited.status_code, 429)
+
+        # System Health monitoring endpoint (Admin only)
+        self.assertEqual(self.client.get("/api/admin/system-health", headers=self._hdr(eng)).status_code, 403)
+        sh = self.client.get("/api/admin/system-health", headers=self._hdr(adm))
+        self.assertEqual(sh.status_code, 200)
+        self.assertEqual(sh.json()["database_status"], "HEALTHY")
+        self.assertEqual(sh.json()["last_backup"]["status"], "AVAILABLE")
+
 
 if __name__ == "__main__":
     unittest.main()

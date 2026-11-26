@@ -479,7 +479,7 @@ export function InspectionsPage() {
             )}
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-start">
             <button type="submit" disabled={submitting} className="rounded-xl bg-[#1E3A5F] px-5 py-2.5 text-sm font-semibold text-white hover:bg-[#284B78] disabled:opacity-60">
               {submitting ? 'Saving Inspection...' : 'Save Inspection Report'}
             </button>

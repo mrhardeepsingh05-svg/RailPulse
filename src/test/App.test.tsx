@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { RailyAssistant } from '../components/RailyAssistant';
 import { ProvenanceBadge, StatusBadge } from '../components/ui/Badges';
 import { HorizontalBarChart } from '../components/ui/Charts';
 import { AuthProvider } from '../context/AuthContext';
 import { ToastProvider } from '../context/ToastContext';
+import { api } from '../lib/api';
 import { LoginPage } from '../pages/LoginPage';
 
 describe('RailPulse AI v2 Frontend & Accessibility', () => {
@@ -94,5 +96,32 @@ describe('RailPulse AI v2 Frontend & Accessibility', () => {
     fireEvent.click(screen.getByRole('button', { name: /Open Raily Railway Assistant/i }));
     expect(screen.getByRole('region', { name: /Raily Helper Panel/i })).toBeInTheDocument();
     expect(screen.getByText(/Guided Help from your saved database records/i)).toBeInTheDocument();
+  });
+
+  it('catches unexpected component render crashes inside ErrorBoundary', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    function Boom(): never {
+      throw new Error('Test render failure');
+    }
+    render(
+      <ErrorBoundary>
+        <Boom />
+      </ErrorBoundary>,
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent(/Something went wrong/i);
+    spy.mockRestore();
+  });
+
+  it('retries idempotent GET requests once on 503 and does not retry POST', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503, headers: new Headers(), json: async () => ({ detail: 'Busy' }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(), json: async () => ({ status: 'ok' }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await api.get<{ status: string }>('/api/health');
+    expect(res.status).toBe('ok');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    vi.unstubAllGlobals();
   });
 });

@@ -149,8 +149,8 @@ export function AppLayout({ title, children }: { title: string; children: React.
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-sky-200 truncate">{user.role_display}</p>
-            <p className="text-[10px] text-sky-200/75 truncate mt-0.5">{user.department}</p>
+            <p className="text-[11px] text-sky-100 truncate">{user.role_display}</p>
+            <p className="text-[10px] text-sky-100 truncate mt-0.5">{user.department}</p>
           </div>
         )}
         <button
@@ -410,7 +410,7 @@ export function AppLayout({ title, children }: { title: string; children: React.
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main id="main-content" className="flex-1 p-4 sm:p-6 pb-24 max-w-7xl w-full mx-auto space-y-6">
           {children}
         </main>
 

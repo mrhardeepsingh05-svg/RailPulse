@@ -55,7 +55,7 @@ export function ProvenanceBadge({ isDemo }: { isDemo: boolean | number }) {
 
 export function CardSkeleton({ rows = 4 }: { rows?: number }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-5 space-y-3 shadow-xs animate-pulse" aria-busy="true" aria-label="Loading">
+    <div role="status" className="rounded-2xl border border-slate-200/80 bg-white p-5 space-y-3 shadow-xs animate-pulse" aria-busy="true" aria-label="Loading">
       <div className="h-4 w-1/3 rounded bg-slate-200" />
       {Array.from({ length: rows }).map((_, i) => (
         <div key={i} className="h-3.5 w-full rounded bg-slate-100" />

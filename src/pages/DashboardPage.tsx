@@ -232,7 +232,7 @@ export function DashboardPage() {
                 style={{ width: `${data.maintenance_progress.completion_pct}%` }}
               />
             </div>
-            <div className="flex justify-between text-[11px] text-slate-500 pt-1">
+            <div className="flex justify-between text-[11px] text-slate-600 pt-1">
               <span>{data.maintenance_progress.completed} completed</span>
               <span>{data.maintenance_progress.open} open</span>
             </div>
@@ -275,13 +275,13 @@ export function DashboardPage() {
             <button
               type="button"
               onClick={() => navigate('/calendar')}
-              className="text-[11px] font-semibold text-sky-600 hover:underline"
+              className="text-[11px] font-semibold text-sky-700 hover:underline"
             >
               Calendar
             </button>
           </div>
           {data.upcoming_inspections.length === 0 ? (
-            <p className="text-xs text-slate-500 py-6 text-center">No inspections due in the next 14 days.</p>
+            <p className="text-xs text-slate-600 py-6 text-center">No inspections due in the next 14 days.</p>
           ) : (
             <div className="space-y-2.5">
               {data.upcoming_inspections.map((u) => (
@@ -290,8 +290,8 @@ export function DashboardPage() {
                     <span className="font-semibold text-slate-900">{u.asset_code} — {u.name}</span>
                     <StatusBadge value={u.current_condition} />
                   </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Due: <strong className="text-slate-700 tabular-nums">{u.next_inspection_date}</strong> · {u.category_name}
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    Due: <strong className="text-slate-800 tabular-nums">{u.next_inspection_date}</strong> · {u.category_name}
                   </p>
                 </div>
               ))}
@@ -321,7 +321,7 @@ export function DashboardPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-medium text-slate-700">{act.actor_username}</p>
-                  <p className="text-[10px] text-slate-400 tabular-nums">{act.created_at.slice(0, 16).replace('T', ' ')}</p>
+                  <p className="text-[10px] text-slate-600 tabular-nums">{act.created_at.slice(0, 16).replace('T', ' ')}</p>
                 </div>
               </div>
             ))}

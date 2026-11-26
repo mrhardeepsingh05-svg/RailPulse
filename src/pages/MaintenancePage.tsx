@@ -265,11 +265,11 @@ export function MaintenancePage() {
                       </td>
                       <td className="px-4 py-3.5">
                         <p className="font-semibold text-slate-900 text-sm">{t.title}</p>
-                        <p className="text-slate-500">{t.asset_code} — {t.asset_name}</p>
+                        <p className="text-slate-600">{t.asset_code} — {t.asset_name}</p>
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap"><StatusBadge value={t.priority} /></td>
                       <td className="px-4 py-3.5 whitespace-nowrap"><StatusBadge value={t.status} /></td>
-                      <td className="px-4 py-3.5 text-slate-700">{t.assignee_name || <span className="text-slate-400">Unassigned</span>}</td>
+                      <td className="px-4 py-3.5 text-slate-700">{t.assignee_name || <span className="text-slate-600">Unassigned</span>}</td>
                       <td className="px-4 py-3.5 tabular-nums whitespace-nowrap">
                         <span className={isOverdue ? 'font-bold text-rose-600' : 'text-slate-700'}>{t.due_date}</span>
                         {isOverdue && <span className="block text-[10px] font-bold text-rose-600">PAST DUE</span>}
@@ -460,7 +460,7 @@ export function MaintenancePage() {
                         <span className="font-semibold text-slate-900">
                           {h.previous_status ? `${h.previous_status} → ${h.new_status}` : `Created (${h.new_status})`}
                         </span>
-                        <span className="text-[11px] text-slate-400 tabular-nums">{h.recorded_at}</span>
+                        <span className="text-[11px] text-slate-600 tabular-nums">{h.recorded_at}</span>
                       </div>
                       <p className="text-slate-700 mt-0.5">{h.action_summary}</p>
                       {h.notes && <p className="text-slate-600 mt-0.5 italic">&ldquo;{h.notes}&rdquo;</p>}

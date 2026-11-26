@@ -52,7 +52,7 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F4F7FB] flex flex-col justify-center py-10 px-4 sm:px-6">
+    <main className="min-h-screen bg-[#F4F7FB] flex flex-col justify-center py-10 px-4 sm:px-6">
       <div className="mx-auto w-full max-w-4xl grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         <section className="lg:col-span-6 rounded-2xl bg-[#1E3A5F] text-white p-7 sm:p-8 flex flex-col justify-between shadow-lg">
           <div>
@@ -190,6 +190,6 @@ export function LoginPage() {
           )}
         </section>
       </div>
-    </div>
+    </main>
   );
 }
