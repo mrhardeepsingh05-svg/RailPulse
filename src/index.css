@@ -1,0 +1,111 @@
+@import "tailwindcss";
+
+:root {
+  --rp-navy: #1e3a5f;
+  --rp-navy-hover: #284b78;
+  --rp-sky: #2563eb;
+  --rp-sky-soft: #e0f2fe;
+  --rp-lavender: #7c3aed;
+  --rp-lavender-soft: #ede9fe;
+  --rp-mint: #059669;
+  --rp-mint-soft: #d1fae5;
+  --rp-peach: #d97706;
+  --rp-peach-soft: #fef3c7;
+  --rp-bg: #f4f7fb;
+  --rp-surface: #ffffff;
+  --rp-border: #e2e8f0;
+  --rp-text: #1e293b;
+  --rp-text-muted: #64748b;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--rp-bg);
+  color: var(--rp-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rp-sky);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  background: var(--rp-navy);
+  color: #ffffff;
+  padding: 0.625rem 1rem;
+  font-weight: 600;
+  border-radius: 0 0 0.5rem 0;
+}
+.skip-link:focus {
+  left: 0.75rem;
+  top: 0.75rem;
+}
+
+@keyframes raily-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes raily-wave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-14deg); }
+  75% { transform: rotate(10deg); }
+}
+
+.raily-idle {
+  animation: raily-bob 3.4s ease-in-out infinite;
+}
+
+.raily-arm-wave {
+  transform-origin: 48px 34px;
+  animation: raily-wave 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .raily-idle,
+  .raily-arm-wave {
+    animation: none !important;
+  }
+}
+
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+  main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body {
+    background: #ffffff !important;
+  }
+}
