@@ -360,10 +360,44 @@ class RailPulseV2BackendTests(unittest.TestCase):
         ai_existing = self.client.post("/api/ai/analyze-inspection/1", headers=self._hdr(eng))
         self.assertEqual(ai_existing.status_code, 200)
 
-        # CSV export across report types + notification read + logout
-        for rtype in ("inspections", "asset_condition", "maintenance", "team_activity", "fault_summary"):
+        # CSV & PDF export across report types (including overdue_tasks) + notification read + logout
+        for rtype in ("inspections", "asset_condition", "maintenance", "overdue_tasks", "team_activity", "fault_summary"):
             csv_res = self.client.get(f"/api/reports/export?fmt=csv&report_type={rtype}", headers=self._hdr(eng))
             self.assertEqual(csv_res.status_code, 200)
+        pdf_overdue = self.client.get("/api/reports/export?fmt=pdf&report_type=overdue_tasks", headers=self._hdr(eng))
+        self.assertEqual(pdf_overdue.status_code, 200)
+        self.assertTrue(pdf_overdue.content.startswith(b"%PDF-1.4"))
+
+        # Predictive Maintenance endpoint: auth gate, transparent rules, and insufficient-data guardrail
+        self.assertEqual(TestClient(app).get("/api/predictive").status_code, 401)
+        staff = self._login("staff.demo", "Staff@2026!")
+        self.assertEqual(
+            self.client.get("/api/reports/export?fmt=csv&report_type=overdue_tasks", headers=self._hdr(staff)).status_code,
+            403,
+        )
+        new_asset = self.client.post(
+            "/api/assets",
+            headers=self._hdr(eng),
+            json={
+                "name": "Fresh Uninspected Bridge B-99",
+                "category_id": 2,
+                "section_location": "South Spur — Km 99.0",
+                "description": "Newly registered asset with no inspection history yet",
+                "registration_date": "2026-11-26",
+                "current_condition": "Good",
+                "maintenance_status": "Active",
+            },
+        )
+        self.assertEqual(new_asset.status_code, 201)
+        pred_res = self.client.get("/api/predictive", headers=self._hdr(eng))
+        self.assertEqual(pred_res.status_code, 200)
+        pred = pred_res.json()
+        self.assertEqual(pred["provenance_label"], "PREDICTIVE ESTIMATES")
+        self.assertTrue(len(pred["rules_documentation"]) >= 5)
+        fresh_est = next(a for a in pred["asset_estimates"] if a["name"] == "Fresh Uninspected Bridge B-99")
+        self.assertEqual(fresh_est["risk_level"], "Insufficient Data")
+        self.assertIsNone(fresh_est["risk_score"])
+        self.assertEqual(fresh_est["data_availability"], "Insufficient")
 
         notifs = self.client.get("/api/notifications", headers=self._hdr(eng)).json()["items"]
         if notifs:

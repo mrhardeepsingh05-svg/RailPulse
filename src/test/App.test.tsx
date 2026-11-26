@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { RailyAssistant } from '../components/RailyAssistant';
-import { ProvenanceBadge, StatusBadge } from '../components/ui/Badges';
+import { EstimateBadge, ProvenanceBadge, StatusBadge, SuggestionBadge } from '../components/ui/Badges';
 import { HorizontalBarChart } from '../components/ui/Charts';
 import { AuthProvider } from '../context/AuthContext';
 import { ToastProvider } from '../context/ToastContext';
@@ -57,17 +57,23 @@ describe('RailPulse AI v2 Frontend & Accessibility', () => {
       <div>
         <ProvenanceBadge isDemo={1} />
         <ProvenanceBadge isDemo={0} />
+        <SuggestionBadge />
+        <EstimateBadge />
         <StatusBadge value="Good" />
         <StatusBadge value="Waiting for Review" />
         <StatusBadge value="Critical Alert" />
+        <StatusBadge value="Insufficient Data" />
       </div>,
     );
 
     expect(screen.getByText('DEMO DATA')).toBeInTheDocument();
     expect(screen.getByText('LIVE DATA')).toBeInTheDocument();
+    expect(screen.getByText('AI-GENERATED SUGGESTIONS')).toBeInTheDocument();
+    expect(screen.getByText('PREDICTIVE ESTIMATES')).toBeInTheDocument();
     expect(screen.getByText('Good')).toBeInTheDocument();
     expect(screen.getByText('Waiting for Review')).toBeInTheDocument();
     expect(screen.getByText('Critical Alert')).toBeInTheDocument();
+    expect(screen.getByText('Insufficient Data')).toBeInTheDocument();
   });
 
   it('renders accessible HorizontalBarChart progressbars', () => {

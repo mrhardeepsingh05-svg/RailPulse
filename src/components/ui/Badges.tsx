@@ -24,6 +24,10 @@ const STATUS_STYLES: Record<string, string> = {
   'Out of Service': 'bg-rose-50 text-rose-700 border-rose-200',
   'Needs Follow-up': 'bg-rose-50 text-rose-700 border-rose-200',
   Critical: 'bg-rose-50 text-rose-700 border-rose-200',
+  'High Watch': 'bg-rose-50 text-rose-700 border-rose-200',
+  'Moderate Watch': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Low Watch': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Insufficient Data': 'bg-slate-100 text-slate-700 border-slate-200',
 };
 
 export function StatusBadge({ value }: { value: string }) {
@@ -49,6 +53,28 @@ export function ProvenanceBadge({ isDemo }: { isDemo: boolean | number }) {
       className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-sky-700 uppercase"
     >
       LIVE DATA
+    </span>
+  );
+}
+
+export function SuggestionBadge() {
+  return (
+    <span
+      title="AI-generated suggestion awaiting human verification"
+      className="inline-flex items-center rounded-full border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-violet-700 uppercase"
+    >
+      AI-GENERATED SUGGESTIONS
+    </span>
+  );
+}
+
+export function EstimateBadge() {
+  return (
+    <span
+      title="Rule-based estimate from historical database records"
+      className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-800 uppercase"
+    >
+      PREDICTIVE ESTIMATES
     </span>
   );
 }

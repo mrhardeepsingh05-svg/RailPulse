@@ -278,3 +278,78 @@ export interface GlobalSearchResults {
   team: { id: number; username: string; full_name: string; department: string; role_display: string }[];
   reports: { id: string; title: string; description: string }[];
 }
+
+export interface PredictiveAssetEstimate {
+  id: number;
+  asset_code: string;
+  name: string;
+  category_name: string;
+  section_location: string;
+  current_condition: AssetCondition;
+  maintenance_status: AssetOperationalStatus;
+  last_inspection_date: string | null;
+  next_inspection_date: string | null;
+  is_demo: number;
+  inspection_count: number;
+  followup_count: number;
+  fault_count: number;
+  open_fault_count: number;
+  critical_fault_count: number;
+  total_work_orders: number;
+  open_work_orders: number;
+  overdue_work_orders: number;
+  overdue_days: number;
+  history_records: number;
+  data_availability: 'Sufficient' | 'Limited' | 'Insufficient';
+  risk_score: number | null;
+  risk_level: 'High Watch' | 'Moderate Watch' | 'Low Watch' | 'Insufficient Data';
+  confidence: string;
+  prediction_basis: string[];
+  recommended_action: string;
+}
+
+export interface PredictiveMaintenancePayload {
+  provenance_label: string;
+  system_data_sufficient: boolean;
+  summary: {
+    total_assets_evaluated: number;
+    sufficient_assets: number;
+    insufficient_data_assets: number;
+    high_watch_count: number;
+    overdue_inspections_count: number;
+    repeated_issue_assets_count: number;
+    total_history_records: number;
+  };
+  rules_documentation: { factor: string; points: string; meaning: string }[];
+  asset_estimates: PredictiveAssetEstimate[];
+  overdue_inspections: {
+    id: number;
+    asset_code: string;
+    name: string;
+    category_name: string;
+    section_location: string;
+    next_inspection_date: string;
+    days_overdue: number;
+    is_demo: number;
+  }[];
+  frequent_fault_assets: {
+    id: number;
+    asset_code: string;
+    name: string;
+    category_name: string;
+    fault_count: number;
+    open_fault_count: number;
+    critical_fault_count: number;
+    is_demo: number;
+  }[];
+  repeated_issue_assets: {
+    id: number;
+    asset_code: string;
+    name: string;
+    total_work_orders: number;
+    fault_count: number;
+    followup_count: number;
+    is_demo: number;
+  }[];
+  safety_disclaimer: string;
+}

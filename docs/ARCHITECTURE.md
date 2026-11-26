@@ -22,7 +22,7 @@ RailPulse AI is a two-tier web application:
 ## 4. API Overview
 - `GET /api/health` — Public health status and AI mode (`DEMO_MODE` vs `LIVE_VISION_LLM`).
 - `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
-- `GET /api/dashboard`, `GET /api/analytics`, `GET /api/calendar`, `GET /api/search?q=`
+- `GET /api/dashboard`, `GET /api/analytics`, `GET /api/predictive`, `GET /api/calendar`, `GET /api/search?q=`
 - `GET/POST /api/assets`, `GET/PATCH /api/assets/{id}`, `POST /api/assets/{id}/images`
 - `GET/POST /api/inspections`, `PATCH /api/inspections/{id}/review`, `POST /api/ai/analyze`
 - `GET/POST /api/work-orders`, `GET/PATCH /api/work-orders/{id}`, `POST /api/work-orders/{id}/images`

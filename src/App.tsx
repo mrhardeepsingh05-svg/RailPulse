@@ -16,6 +16,7 @@ const MaintenancePage = lazy(() => import('./pages/MaintenancePage').then((m) =>
 const MapPage = lazy(() => import('./pages/MapPage').then((m) => ({ default: m.MapPage })));
 const CalendarPage = lazy(() => import('./pages/CalendarPage').then((m) => ({ default: m.CalendarPage })));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage').then((m) => ({ default: m.AnalyticsPage })));
+const PredictivePage = lazy(() => import('./pages/PredictivePage').then((m) => ({ default: m.PredictivePage })));
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((m) => ({ default: m.NotificationsPage })));
 const TeamPage = lazy(() => import('./pages/TeamPage').then((m) => ({ default: m.TeamPage })));
@@ -80,6 +81,7 @@ export function AppRoutes() {
       <Route path="/map" element={<ProtectedRoute title="Asset Map"><MapPage /></ProtectedRoute>} />
       <Route path="/calendar" element={<ProtectedRoute title="Schedule Calendar"><CalendarPage /></ProtectedRoute>} />
       <Route path="/analytics" element={<ProtectedRoute title="Analytics & Trends"><AnalyticsPage /></ProtectedRoute>} />
+      <Route path="/predictive" element={<ProtectedRoute title="Predictive Maintenance"><PredictivePage /></ProtectedRoute>} />
       <Route path="/reports" element={<ProtectedRoute title="Reports" allowedRoles={['admin', 'inspector', 'engineer']}><ReportsPage /></ProtectedRoute>} />
       <Route path="/notifications" element={<ProtectedRoute title="Notifications"><NotificationsPage /></ProtectedRoute>} />
       <Route path="/team" element={<ProtectedRoute title="Team Management" allowedRoles={['admin']}><TeamPage /></ProtectedRoute>} />

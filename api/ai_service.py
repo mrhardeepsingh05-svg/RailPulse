@@ -331,6 +331,8 @@ def _suggest_links(lower_query: str) -> list[dict[str, str]]:
         links.append({"label": "Open Reports", "path": "/reports"})
     if any(k in lower_query for k in ["analytic", "trend", "chart"]):
         links.append({"label": "Open Analytics", "path": "/analytics"})
+    if any(k in lower_query for k in ["predict", "risk", "overdue", "repeat", "watch", "early"]):
+        links.append({"label": "Open Predictive Maintenance", "path": "/predictive"})
     if not links:
         links.append({"label": "Go to Dashboard", "path": "/"})
     return links[:3]

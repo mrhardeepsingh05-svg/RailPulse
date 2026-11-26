@@ -9,7 +9,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { CardSkeleton, EmptyState, ProvenanceBadge, StatusBadge } from '../components/ui/Badges';
+import { CardSkeleton, EmptyState, ProvenanceBadge, StatusBadge, SuggestionBadge } from '../components/ui/Badges';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { api, ApiError } from '../lib/api';
@@ -306,6 +306,7 @@ export function InspectionsPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <Bot className="h-4 w-4 text-[#7C3AED]" aria-hidden="true" />
               <h2 className="text-sm font-bold text-[#1E3A5F]">{aiResult.label}</h2>
+              <SuggestionBadge />
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-full bg-violet-50 border border-violet-200 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700">

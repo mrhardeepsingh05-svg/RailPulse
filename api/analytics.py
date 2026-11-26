@@ -423,6 +423,7 @@ def global_search(conn: Any, query: str) -> dict[str, Any]:
         {"id": "inspections", "title": "Inspection Reports", "description": "All submitted and reviewed inspection checks."},
         {"id": "asset_condition", "title": "Asset Condition Reports", "description": "Condition, inspection dates, and open task counts per asset."},
         {"id": "maintenance", "title": "Maintenance Reports", "description": "Maintenance task status, assignees, and due dates."},
+        {"id": "overdue_tasks", "title": "Overdue Task Reports", "description": "Maintenance tasks past their due date and still open."},
         {"id": "team_activity", "title": "Team Activity Reports", "description": "Recent actions recorded by team members."},
         {"id": "fault_summary", "title": "Fault Summary Reports", "description": "Fault counts by category and severity."},
     ]
@@ -517,18 +518,38 @@ def build_report_data(conn: Any) -> dict[str, Any]:
         ).fetchall()
     ]
 
+    today = _today_str()
+    overdue_tasks = [
+        dict(r)
+        for r in conn.execute(
+            """
+            SELECT w.work_order_code, w.title, w.priority, w.status, w.due_date,
+                   CAST(julianday(?) - julianday(w.due_date) AS INTEGER) AS days_overdue,
+                   a.asset_code, a.name AS asset_name,
+                   COALESCE(u.full_name, 'Unassigned') AS assignee_name, w.is_demo
+            FROM work_orders w
+            JOIN railway_assets a ON a.id = w.asset_id
+            LEFT JOIN users u ON u.id = w.assigned_to
+            WHERE w.status != 'Completed' AND w.due_date < ?
+            ORDER BY w.due_date ASC
+            """,
+            (today, today),
+        ).fetchall()
+    ]
+
     return {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "asset_condition": asset_condition,
         "inspections": inspections,
         "maintenance": maintenance,
+        "overdue_tasks": overdue_tasks,
         "team_activity": team_activity,
         "fault_summary": fault_summary,
     }
 
 
 def export_report_csv(report: dict[str, Any], report_type: str) -> str:
-    """Generate formula-injection-safe CSV for any of the 5 report types."""
+    """Generate formula-injection-safe CSV for any of the 6 report types."""
     buf = io.StringIO()
     writer = csv.writer(buf)
 
@@ -540,6 +561,10 @@ def export_report_csv(report: dict[str, Any], report_type: str) -> str:
         writer.writerow(["Task ID", "Title", "Asset ID", "Priority", "Status", "Assigned To", "Due Date", "Data Type"])
         for r in report["maintenance"]:
             writer.writerow([sanitize_csv_cell(r[k]) for k in ("work_order_code", "title", "asset_code", "priority", "status", "assignee_name", "due_date")] + ["DEMO DATA" if r["is_demo"] else "REAL DATA"])
+    elif report_type == "overdue_tasks":
+        writer.writerow(["Task ID", "Title", "Asset ID", "Priority", "Status", "Assigned To", "Due Date", "Days Overdue", "Data Type"])
+        for r in report["overdue_tasks"]:
+            writer.writerow([sanitize_csv_cell(r[k]) for k in ("work_order_code", "title", "asset_code", "priority", "status", "assignee_name", "due_date")] + [r["days_overdue"], "DEMO DATA" if r["is_demo"] else "REAL DATA"])
     elif report_type == "team_activity":
         writer.writerow(["Timestamp", "User", "Role", "Action", "Target", "Details"])
         for r in report["team_activity"]:
@@ -566,6 +591,7 @@ def export_report_pdf(report: dict[str, Any], report_type: str = "asset_conditio
         "inspections": "Inspection Summary Report",
         "asset_condition": "Asset Condition Report",
         "maintenance": "Maintenance Tasks Report",
+        "overdue_tasks": "Overdue Maintenance Tasks Report",
         "team_activity": "Team Activity Report",
         "fault_summary": "Fault Summary Report",
     }
@@ -584,6 +610,10 @@ def export_report_pdf(report: dict[str, Any], report_type: str = "asset_conditio
         for r in report["maintenance"]:
             tag = "[DEMO]" if r["is_demo"] else "[REAL]"
             lines.append(f"{tag} {r['work_order_code']} | {r['priority']} | {r['status']} | Due:{r['due_date']} | {r['assignee_name']} | {r['title'][:28]}")
+    elif report_type == "overdue_tasks":
+        for r in report["overdue_tasks"]:
+            tag = "[DEMO]" if r["is_demo"] else "[REAL]"
+            lines.append(f"{tag} {r['work_order_code']} | Overdue:{r['days_overdue']}d | {r['priority']} | {r['status']} | {r['asset_code']} | {r['assignee_name']}")
     elif report_type == "team_activity":
         for r in report["team_activity"]:
             lines.append(f"{r['created_at'][:16]} | {r['actor_username']} ({r['actor_role']}) | {r['action']} | {r['entity_id']}")
@@ -651,3 +681,221 @@ def export_report_pdf(report: dict[str, Any], report_type: str = "asset_conditio
         pdf.extend(f"{off:010d} 00000 n \n".encode("latin-1"))
     pdf.extend(f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode("latin-1"))
     return bytes(pdf)
+
+
+def compute_predictive_maintenance(conn: Any) -> dict[str, Any]:
+    """Transparent rule-based Predictive Maintenance analysis strictly from stored history.
+
+    Enforces data-availability guardrails: assets with zero historical inspections,
+    fault reports, and maintenance tasks receive 'Insufficient Data' rather than
+    a fabricated prediction. Never claims to predict railway accidents or guarantee safety.
+    """
+    today = _today_str()
+    today_dt = datetime.strptime(today, "%Y-%m-%d").date()
+
+    rows = conn.execute(
+        """
+        SELECT a.id, a.asset_code, a.name, a.section_location, a.current_condition,
+               a.maintenance_status, a.last_inspection_date, a.next_inspection_date, a.is_demo,
+               c.name AS category_name,
+               (SELECT COUNT(*) FROM inspections i WHERE i.asset_id = a.id) AS inspection_count,
+               (SELECT COUNT(*) FROM inspections i WHERE i.asset_id = a.id AND i.status = 'Needs Follow-up') AS followup_count,
+               (SELECT COUNT(*) FROM fault_reports f WHERE f.asset_id = a.id) AS fault_count,
+               (SELECT COUNT(*) FROM fault_reports f WHERE f.asset_id = a.id AND f.status IN ('Open', 'Assigned')) AS open_fault_count,
+               (SELECT COUNT(*) FROM fault_reports f WHERE f.asset_id = a.id AND f.severity = 'Critical') AS critical_fault_count,
+               (SELECT COUNT(*) FROM work_orders w WHERE w.asset_id = a.id) AS total_work_orders,
+               (SELECT COUNT(*) FROM work_orders w WHERE w.asset_id = a.id AND w.status != 'Completed') AS open_work_orders,
+               (SELECT COUNT(*) FROM work_orders w WHERE w.asset_id = a.id AND w.status != 'Completed' AND w.due_date < ?) AS overdue_work_orders
+        FROM railway_assets a
+        JOIN asset_categories c ON c.id = a.category_id
+        ORDER BY a.id ASC
+        """,
+        (today,),
+    ).fetchall()
+
+    rules_documentation = [
+        {"factor": "Critical or Under Repair condition", "points": "+35 / +20", "meaning": "Asset condition is currently flagged Critical Alert (+35) or Needs Attention / Under Repair (+20)."},
+        {"factor": "Repeated maintenance work orders", "points": "+20", "meaning": "Asset has 2 or more recorded maintenance tasks showing recurring repair demand."},
+        {"factor": "Frequent or open fault reports", "points": "+15 / +25", "meaning": "Multiple faults or unresolved open faults (+15), plus +10 if Critical severity fault exists."},
+        {"factor": "Overdue scheduled inspection", "points": "+20", "meaning": "Next scheduled inspection date has passed without a newly completed check."},
+        {"factor": "Overdue maintenance task", "points": "+15", "meaning": "One or more open maintenance tasks are past their target due date."},
+        {"factor": "Repeated follow-up inspections", "points": "+10", "meaning": "Multiple inspections marked Needs Follow-up."},
+    ]
+
+    asset_estimates: list[dict[str, Any]] = []
+    overdue_inspections: list[dict[str, Any]] = []
+    frequent_fault_assets: list[dict[str, Any]] = []
+    repeated_issue_assets: list[dict[str, Any]] = []
+    insufficient_count = 0
+
+    for r in rows:
+        item = dict(r)
+        history_records = item["inspection_count"] + item["fault_count"] + item["total_work_orders"]
+
+        overdue_days = 0
+        if item["next_inspection_date"]:
+            try:
+                due_dt = datetime.strptime(item["next_inspection_date"], "%Y-%m-%d").date()
+                if due_dt < today_dt:
+                    overdue_days = (today_dt - due_dt).days
+            except ValueError:
+                overdue_days = 0
+
+        if overdue_days > 0:
+            overdue_inspections.append(
+                {
+                    "id": item["id"],
+                    "asset_code": item["asset_code"],
+                    "name": item["name"],
+                    "category_name": item["category_name"],
+                    "section_location": item["section_location"],
+                    "next_inspection_date": item["next_inspection_date"],
+                    "days_overdue": overdue_days,
+                    "is_demo": item["is_demo"],
+                }
+            )
+
+        if item["fault_count"] >= 1:
+            frequent_fault_assets.append(
+                {
+                    "id": item["id"],
+                    "asset_code": item["asset_code"],
+                    "name": item["name"],
+                    "category_name": item["category_name"],
+                    "fault_count": item["fault_count"],
+                    "open_fault_count": item["open_fault_count"],
+                    "critical_fault_count": item["critical_fault_count"],
+                    "is_demo": item["is_demo"],
+                }
+            )
+
+        if item["total_work_orders"] >= 2 or item["followup_count"] >= 2 or item["fault_count"] >= 2:
+            repeated_issue_assets.append(
+                {
+                    "id": item["id"],
+                    "asset_code": item["asset_code"],
+                    "name": item["name"],
+                    "total_work_orders": item["total_work_orders"],
+                    "fault_count": item["fault_count"],
+                    "followup_count": item["followup_count"],
+                    "is_demo": item["is_demo"],
+                }
+            )
+
+        if history_records < 1:
+            insufficient_count += 1
+            asset_estimates.append(
+                {
+                    **item,
+                    "overdue_days": overdue_days,
+                    "history_records": history_records,
+                    "data_availability": "Insufficient",
+                    "risk_score": None,
+                    "risk_level": "Insufficient Data",
+                    "confidence": "Cannot estimate (0 past records)",
+                    "prediction_basis": [
+                        "No past inspection, fault, or maintenance task records saved for this asset yet."
+                    ],
+                    "recommended_action": "Complete an initial inspection before generating maintenance estimates.",
+                }
+            )
+            continue
+
+        score = 0
+        basis: list[str] = []
+        if item["current_condition"] == "Critical Alert":
+            score += 35
+            basis.append("Current condition is Critical Alert (+35).")
+        elif item["current_condition"] in ("Needs Attention", "Under Repair"):
+            score += 20
+            basis.append(f"Current condition is {item['current_condition']} (+20).")
+
+        if item["total_work_orders"] >= 2:
+            score += 20
+            basis.append(f"Repeated maintenance demand: {item['total_work_orders']} tasks logged (+20).")
+        if item["fault_count"] >= 2 or item["open_fault_count"] >= 1:
+            score += 15
+            basis.append(f"Reported faults: {item['fault_count']} total, {item['open_fault_count']} open (+15).")
+        if item["critical_fault_count"] >= 1:
+            score += 10
+            basis.append(f"Critical-severity fault on record (+10).")
+        if overdue_days > 0:
+            score += 20
+            basis.append(f"Inspection overdue by {overdue_days} day(s) (+20).")
+        if item["overdue_work_orders"] >= 1:
+            score += 15
+            basis.append(f"{item['overdue_work_orders']} overdue maintenance task(s) (+15).")
+        if item["followup_count"] >= 2:
+            score += 10
+            basis.append(f"{item['followup_count']} inspections required follow-up (+10).")
+
+        if not basis:
+            basis.append(f"Based on {history_records} recorded history item(s) with no active alerts or overdue dates.")
+
+        score = min(score, 100)
+        if score >= 50:
+            risk_level = "High Watch"
+            rec_action = "Schedule an urgent follow-up inspection and review open repair tasks."
+        elif score >= 25:
+            risk_level = "Moderate Watch"
+            rec_action = "Plan a targeted follow-up check before the next cycle date."
+        else:
+            risk_level = "Low Watch"
+            rec_action = "Continue regular scheduled checks."
+
+        if history_records >= 4:
+            confidence = f"Medium ({history_records} history records)"
+            availability = "Sufficient"
+        else:
+            confidence = f"Low ({history_records} history record{'s' if history_records != 1 else ''} — limited trend depth)"
+            availability = "Limited"
+
+        asset_estimates.append(
+            {
+                **item,
+                "overdue_days": overdue_days,
+                "history_records": history_records,
+                "data_availability": availability,
+                "risk_score": score,
+                "risk_level": risk_level,
+                "confidence": confidence,
+                "prediction_basis": basis,
+                "recommended_action": rec_action,
+            }
+        )
+
+    asset_estimates.sort(
+        key=lambda a: (a["risk_score"] is not None, a["risk_score"] if a["risk_score"] is not None else -1),
+        reverse=True,
+    )
+    frequent_fault_assets.sort(key=lambda a: (a["fault_count"], a["open_fault_count"]), reverse=True)
+    overdue_inspections.sort(key=lambda a: a["days_overdue"], reverse=True)
+
+    total_inspections = conn.execute("SELECT COUNT(*) AS c FROM inspections").fetchone()["c"]
+    total_faults = conn.execute("SELECT COUNT(*) AS c FROM fault_reports").fetchone()["c"]
+    total_tasks = conn.execute("SELECT COUNT(*) AS c FROM work_orders").fetchone()["c"]
+    sufficient_assets = len(asset_estimates) - insufficient_count
+    system_data_sufficient = (total_inspections + total_faults + total_tasks) >= 3
+
+    return {
+        "provenance_label": "PREDICTIVE ESTIMATES",
+        "system_data_sufficient": system_data_sufficient,
+        "summary": {
+            "total_assets_evaluated": len(asset_estimates),
+            "sufficient_assets": sufficient_assets,
+            "insufficient_data_assets": insufficient_count,
+            "high_watch_count": sum(1 for a in asset_estimates if a["risk_level"] == "High Watch"),
+            "overdue_inspections_count": len(overdue_inspections),
+            "repeated_issue_assets_count": len(repeated_issue_assets),
+            "total_history_records": total_inspections + total_faults + total_tasks,
+        },
+        "rules_documentation": rules_documentation,
+        "asset_estimates": asset_estimates,
+        "overdue_inspections": overdue_inspections,
+        "frequent_fault_assets": frequent_fault_assets,
+        "repeated_issue_assets": repeated_issue_assets,
+        "safety_disclaimer": (
+            "PREDICTIVE ESTIMATES are transparent rule-based indicators calculated strictly from saved database "
+            "records. They assist authorised maintenance teams and NEVER claim to predict railway accidents or guarantee safety."
+        ),
+    }

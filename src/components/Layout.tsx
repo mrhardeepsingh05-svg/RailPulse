@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
+  Activity,
   BarChart3,
   Bell,
   CalendarDays,
@@ -93,6 +94,7 @@ export function AppLayout({ title, children }: { title: string; children: React.
     { to: '/map', label: 'Asset Map', icon: MapPin, roles: ['admin', 'inspector', 'engineer', 'staff'] },
     { to: '/calendar', label: 'Schedule Calendar', icon: CalendarDays, roles: ['admin', 'inspector', 'engineer', 'staff'] },
     { to: '/analytics', label: 'Analytics & Trends', icon: BarChart3, roles: ['admin', 'inspector', 'engineer', 'staff'] },
+    { to: '/predictive', label: 'Predictive Maintenance', icon: Activity, roles: ['admin', 'inspector', 'engineer', 'staff'] },
     { to: '/reports', label: 'Reports', icon: FileText, roles: ['admin', 'inspector', 'engineer'] },
     { to: '/notifications', label: 'Notifications', icon: Bell, roles: ['admin', 'inspector', 'engineer', 'staff'] },
     { to: '/team', label: 'Team Management', icon: Users, roles: ['admin'] },

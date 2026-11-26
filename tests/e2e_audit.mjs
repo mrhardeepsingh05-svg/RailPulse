@@ -58,6 +58,7 @@ async function run() {
       { path: '/map', heading: 'Asset Map', label: 'Map' },
       { path: '/calendar', heading: 'Schedule Calendar', label: 'Calendar' },
       { path: '/analytics', heading: 'Analytics & Trends', label: 'Analytics' },
+      { path: '/predictive', heading: 'Predictive Maintenance', label: 'Predictive' },
       { path: '/reports', heading: 'Reports', label: 'Reports' },
       { path: '/notifications', heading: 'Notifications', label: 'Notifications' },
       { path: '/team', heading: 'Team Management', label: 'Team' },
@@ -108,9 +109,9 @@ async function run() {
     await page.click('button:has-text("Weekly")');
     await page.waitForSelector('button:has-text("Weekly")');
 
-    // 3e. Reports 5 tabs
+    // 3e. Reports 6 tabs
     await page.click('nav a[href="/reports"]');
-    for (const tabLabel of ['Inspection Reports', 'Maintenance Reports', 'Team Activity Reports', 'Fault Summary Reports']) {
+    for (const tabLabel of ['Inspection Reports', 'Maintenance Reports', 'Overdue Task Reports', 'Team Activity Reports', 'Fault Summary Reports']) {
       await page.click(`button[role="tab"]:has-text("${tabLabel}")`);
     }
 

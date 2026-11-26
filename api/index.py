@@ -27,6 +27,7 @@ from api.analytics import (
     build_report_data,
     compute_analytics_overview,
     compute_dashboard_summary,
+    compute_predictive_maintenance,
     export_report_csv,
     export_report_pdf,
     global_search,
@@ -461,6 +462,12 @@ def get_dashboard(
 def get_analytics(_: dict[str, Any] = Depends(get_current_user)):
     with get_db() as conn:
         return compute_analytics_overview(conn)
+
+
+@app.get("/api/predictive")
+def get_predictive_maintenance(_: dict[str, Any] = Depends(get_current_user)):
+    with get_db() as conn:
+        return compute_predictive_maintenance(conn)
 
 
 @app.get("/api/calendar")
@@ -1946,7 +1953,7 @@ def get_reports(_: dict[str, Any] = Depends(require_roles("admin", "engineer", "
 def export_reports(
     request: Request,
     fmt: str = Query(default="pdf", pattern="^(csv|pdf)$"),
-    report_type: str = Query(default="asset_condition", pattern="^(inspections|asset_condition|maintenance|team_activity|fault_summary)$"),
+    report_type: str = Query(default="asset_condition", pattern="^(inspections|asset_condition|maintenance|overdue_tasks|team_activity|fault_summary)$"),
     user: dict[str, Any] = Depends(require_roles("admin", "engineer", "inspector")),
 ):
     with get_db() as conn:

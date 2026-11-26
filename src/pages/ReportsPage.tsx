@@ -4,7 +4,7 @@ import { CardSkeleton, ProvenanceBadge, StatusBadge } from '../components/ui/Bad
 import { useToast } from '../context/ToastContext';
 import { api, ApiError } from '../lib/api';
 
-type ReportTab = 'inspections' | 'asset_condition' | 'maintenance' | 'team_activity' | 'fault_summary';
+type ReportTab = 'inspections' | 'asset_condition' | 'maintenance' | 'overdue_tasks' | 'team_activity' | 'fault_summary';
 
 interface ReportPayload {
   generated_at: string;
@@ -41,6 +41,18 @@ interface ReportPayload {
     assignee_name: string;
     is_demo: number;
   }[];
+  overdue_tasks: {
+    work_order_code: string;
+    title: string;
+    priority: string;
+    status: string;
+    due_date: string;
+    days_overdue: number;
+    asset_code: string;
+    asset_name: string;
+    assignee_name: string;
+    is_demo: number;
+  }[];
   team_activity: {
     actor_username: string;
     actor_role: string;
@@ -64,6 +76,7 @@ const REPORT_TABS: { id: ReportTab; label: string }[] = [
   { id: 'inspections', label: 'Inspection Reports' },
   { id: 'asset_condition', label: 'Asset Condition Reports' },
   { id: 'maintenance', label: 'Maintenance Reports' },
+  { id: 'overdue_tasks', label: 'Overdue Task Reports' },
   { id: 'team_activity', label: 'Team Activity Reports' },
   { id: 'fault_summary', label: 'Fault Summary Reports' },
 ];
@@ -274,6 +287,46 @@ export function ReportsPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {activeTab === 'overdue_tasks' && (
+          <div className="overflow-x-auto">
+            {report.overdue_tasks.length === 0 ? (
+              <p className="p-6 text-xs text-slate-600">No overdue maintenance tasks found in saved database records.</p>
+            ) : (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-[#F4F7FB] font-semibold text-slate-600 uppercase">
+                    <th className="px-4 py-3">Task ID</th>
+                    <th className="px-4 py-3">Task &amp; Asset</th>
+                    <th className="px-4 py-3">Priority</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Assigned To</th>
+                    <th className="px-4 py-3">Due Date</th>
+                    <th className="px-4 py-3">Days Overdue</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {report.overdue_tasks.map((m) => (
+                    <tr key={m.work_order_code}>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <code className="font-bold text-[#1E3A5F]">{m.work_order_code}</code>
+                          <ProvenanceBadge isDemo={m.is_demo} />
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><strong className="text-slate-900">{m.title}</strong><span className="block text-[11px] text-slate-500">{m.asset_code} — {m.asset_name}</span></td>
+                      <td className="px-4 py-3"><StatusBadge value={m.priority} /></td>
+                      <td className="px-4 py-3"><StatusBadge value={m.status} /></td>
+                      <td className="px-4 py-3">{m.assignee_name}</td>
+                      <td className="px-4 py-3 tabular-nums">{m.due_date}</td>
+                      <td className="px-4 py-3 tabular-nums font-bold text-rose-700">{m.days_overdue}d</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
 
